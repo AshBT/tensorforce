@@ -13,15 +13,12 @@
 # limitations under the License.
 # ==============================================================================
 
-"""
-Preprocessing stack class
-"""
-
 from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import division
 
 from tensorforce import util
+from tensorforce.core.preprocessing import Preprocessor
 import tensorforce.core.preprocessing
 
 
@@ -65,15 +62,19 @@ class Preprocessing(object):
             processor.reset()
 
     @staticmethod
-    def from_config(config):
-        if not isinstance(config, list):
-            config = [config]
+    def from_spec(spec):
+        """
+        Creates a preprocessing stack from a specification dict.
+        """
+        if not isinstance(spec, list):
+            spec = [spec]
 
         preprocessing = Preprocessing()
-        for config in config:
-            preprocessor = config.type
-            args = config.args if 'args' in config else ()
-            kwargs = config.kwargs if 'kwargs' in config else {}
-            preprocessor = util.function(preprocessor, tensorforce.core.preprocessing.preprocessors)(*args, **kwargs)
+        for spec in spec:
+            preprocessor = util.get_object(
+                obj=spec,
+                predefined_objects=tensorforce.core.preprocessing.preprocessors
+            )
+            assert isinstance(preprocessor, Preprocessor)
             preprocessing.add(preprocessor=preprocessor)
         return preprocessing

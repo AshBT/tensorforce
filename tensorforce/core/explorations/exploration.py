@@ -23,8 +23,13 @@ class Exploration(object):
         raise NotImplementedError
 
     @staticmethod
-    def from_config(config):
-        exploration = config.type
-        args = config.args if 'args' in config else ()
-        kwargs = config.kwargs if 'kwargs' in config else {}
-        return util.function(exploration, tensorforce.core.explorations.explorations)(*args, **kwargs)
+    def from_spec(spec):
+        """
+        Creates an exploration object from a specification dict.
+        """
+        exploration = util.get_object(
+            obj=spec,
+            predefined_objects=tensorforce.core.explorations.explorations
+        )
+        assert isinstance(exploration, Exploration)
+        return exploration

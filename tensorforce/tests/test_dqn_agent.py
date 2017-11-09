@@ -18,44 +18,31 @@ from __future__ import print_function
 from __future__ import division
 
 import unittest
-from six.moves import xrange
-
 
 from tensorforce import Configuration
 from tensorforce.agents import DQNAgent
-from tensorforce.core.networks import layered_network_builder
-from tensorforce.environments.minimal_test import MinimalTest
-from tensorforce.execution import Runner
+from tensorforce.tests.base_agent_test import BaseAgentTest
 
 
-class TestDQNAgent(unittest.TestCase):
+class TestDQNAgent(BaseAgentTest, unittest.TestCase):
 
-    def test_discrete(self):
-        passed = 0
+    agent = DQNAgent
+    deterministic = True
 
-        for _ in xrange(5):
-            environment = MinimalTest(continuous=False)
-            config = Configuration(
-                batch_size=8,
-                learning_rate=0.001,
-                memory_capacity=800,
-                first_update=80,
-                repeat_update=4,
-                target_update_frequency=20,
-                states=environment.states,
-                actions=environment.actions,
-                network=layered_network_builder([dict(type='dense', size=32)])
-            )
-            agent = DQNAgent(config=config)
-            runner = Runner(agent=agent, environment=environment)
+    config = Configuration(
+        memory=dict(
+            type='replay',
+            capacity=1000
+        ),
+        optimizer=dict(
+            type="adam",
+            learning_rate=0.002
+        ),
+        repeat_update=4,
+        batch_size=32,
+        first_update=64,
+        target_sync_frequency=10
+    )
 
-            def episode_finished(r):
-                return r.episode < 100 or not all(x >= 1.0 for x in r.episode_rewards[-100:])
-
-            runner.run(episodes=1000, episode_finished=episode_finished)
-            print('DQN Agent: ' + str(runner.episode))
-            if runner.episode < 1000:
-                passed += 1
-
-        print('DQN Agent passed = {}'.format(passed))
-        self.assertTrue(passed >= 4)
+    exclude_float = True
+    exclude_bounded = True

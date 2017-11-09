@@ -13,48 +13,110 @@
 # limitations under the License.
 # ==============================================================================
 
-"""
-Vanilla policy gradient agent.
-"""
-
 from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import division
 
 from tensorforce.agents import BatchAgent
-from tensorforce.models import VPGModel
+from tensorforce.models import PGLogProbModel
 
 
 class VPGAgent(BatchAgent):
     """
-    Vanilla Policy Gradient agent as described by [Sutton et al. (1999)](https://papers.nips.cc/paper/1713-policy-gradient-methods-for-reinforcement-learning-with-function-approximation.pdf).
+    Vanilla Policy Gradient agent as described by [Sutton et al. (1999)]
+    (https://papers.nips.cc/paper/1713-policy-gradient-methods-for-reinforcement-learning-with-function-approximation.pdf).
 
-    Configuration:
+    ### Configuration options
 
-    Each agent requires the following ``Configuration`` parameters:
+    #### General:
 
-    * `states`: dict containing one or more state definitions.
-    * `actions`: dict containing one or more action definitions.
-    * `preprocessing`: dict or list containing state preprocessing configuration.
-    * `exploration`: dict containing action exploration configuration.
+    * `scope`: TensorFlow variable scope name (default: 'vpg')
 
-    The `BatchAgent` class additionally requires the following parameters:
+    #### Hyperparameters:
 
-    * `batch_size`: integer of the batch size.
+    * `batch_size`: Positive integer (**mandatory**)
+    * `discount`: Positive float, at most 1.0 (default: 0.99)
+    * `normalize_rewards`: Boolean (default: false)
+    * `entropy_regularization`: None or positive float (default: none)
+    * `gae_lambda`: None or float between 0.0 and 1.0 (default: none)
 
-    A Policy Gradient Model expects the following additional configuration parameters:
+    #### Optimizer:
 
-    * `baseline`: string indicating the baseline value function (currently 'linear' or 'mlp').
-    * `baseline_args`: list of arguments for the baseline value function.
-    * `baseline_kwargs`: dict of keyword arguments for the baseline value function.
-    * `generalized_advantage_estimation`: boolean indicating whether to use GAE.
-    * `gae_lambda`: float of the Generalized Advantage Estimation lambda.
-    * `normalize_advantage`: boolean indicating whether to normalize the advantage or not.
+    * `optimizer`: Specification dict (default: Adam with learning rate 1e-3)
 
-    The VPG agent does not require any additional configuration parameters.
+    #### Baseline:
 
+    * `baseline_mode`: None, or one of 'states' or 'network' specifying the baseline input (default: none)
+    * `baseline`: None or specification dict, or per-state specification for aggregated baseline (default: none)
+    * `baseline_optimizer`: None or specification dict (default: none)
+
+    #### Pre-/post-processing:
+
+    * `state_preprocessing`: None or dict with (default: none)
+    * `exploration`: None or dict with (default: none)
+    * `reward_preprocessing`: None or dict with (default: none)
+
+    #### Logging:
+
+    * `log_level`: Logging level, one of the following values (default: 'info')
+        + 'info', 'debug', 'critical', 'warning', 'fatal'
+
+    #### TensorFlow Summaries:
+    * `summary_logdir`: None or summary directory string (default: none)
+    * `summary_labels`: List of summary labels to be reported, some possible values below (default: 'total-loss')
+        + 'total-loss'
+        + 'losses'
+        + 'variables'
+        + 'activations'
+        + 'relu'
+    * `summary_frequency`: Positive integer (default: 1)
     """
 
+    default_config = dict(
+        # Agent
+        preprocessing=None,
+        exploration=None,
+        reward_preprocessing=None,
+        batched_observe=1000,
+        # BatchAgent
+        keep_last_timestep=True,  # not documented!
+        # Model
+        optimizer=dict(
+            type='adam',
+            learning_rate=1e-3
+        ),
+        discount=0.99,
+        normalize_rewards=False,
+        variable_noise=None,  # not documented!!!
+        # DistributionModel
+        distributions_spec=None,  # not documented!!!
+        entropy_regularization=None,
+        # PGModel
+        baseline_mode=None,
+        baseline=None,
+        baseline_optimizer=None,
+        gae_lambda=None,
+        # General
+        log_level='info',
+        device=None,
+        scope='vpg',
+        saver_spec=None,
+        summary_spec=None,
+        distributed_spec=None
+    )
 
-    name = 'VPGAgent'
-    model = VPGModel
+    # missing: batch agent configs
+
+    def __init__(self, states_spec, actions_spec, network_spec, config):
+        self.network_spec = network_spec
+        config = config.copy()  # TODO: copy necessary?
+        config.default(self.__class__.default_config)
+        super(VPGAgent, self).__init__(states_spec, actions_spec, config)
+
+    def initialize_model(self, states_spec, actions_spec, config):
+        return PGLogProbModel(
+            states_spec=states_spec,
+            actions_spec=actions_spec,
+            network_spec=self.network_spec,
+            config=config
+        )

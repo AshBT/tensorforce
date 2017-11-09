@@ -18,81 +18,17 @@ from __future__ import print_function
 from __future__ import division
 
 import unittest
-from six.moves import xrange
 
 from tensorforce import Configuration
 from tensorforce.agents import TRPOAgent
-from tensorforce.core.networks import layered_network_builder
-from tensorforce.environments.minimal_test import MinimalTest
-from tensorforce.execution import Runner
+from tensorforce.tests.base_agent_test import BaseAgentTest
 
 
-class TestTRPOAgent(unittest.TestCase):
+class TestTRPOAgent(BaseAgentTest, unittest.TestCase):
 
-    def test_discrete(self):
-        passed = 0
-
-        # TRPO can occasionally have numerical issues so we allow for 1 in 5 to fail on Travis
-        for _ in xrange(5):
-            environment = MinimalTest(continuous=False)
-            config = Configuration(
-                batch_size=8,
-                learning_rate=0.0001,
-                cg_iterations=20,
-                cg_damping=0.001,
-                line_search_steps=20,
-                max_kl_divergence=0.05,
-                states=environment.states,
-                actions=environment.actions,
-                network=layered_network_builder([
-                    dict(type='dense', size=32, activation='tanh'),
-                    dict(type='dense', size=32, activation='tanh')
-                ])
-            )
-            agent = TRPOAgent(config=config)
-            runner = Runner(agent=agent, environment=environment)
-
-            def episode_finished(r):
-                return r.episode < 100 or not all(x >= 1.0 for x in r.episode_rewards[-100:])
-
-            runner.run(episodes=2000, episode_finished=episode_finished)
-            print('TRPO Agent (discrete): ' + str(runner.episode))
-
-            if runner.episode < 2000:
-                passed += 1
-
-        print('TRPO discrete agent passed = {}'.format(passed))
-        self.assertTrue(passed >= 4)
-
-    def test_continuous(self):
-        passed = 0
-
-        for _ in xrange(5):
-            environment = MinimalTest(continuous=True)
-            config = Configuration(
-                batch_size=8,
-                cg_iterations=20,
-                cg_damping=0.001,
-                line_search_steps=20,
-                max_kl_divergence=0.05,
-                states=environment.states,
-                actions=environment.actions,
-                network=layered_network_builder([
-                    dict(type='dense', size=32, activation='tanh'),
-                    dict(type='dense', size=32, activation='tanh')
-                ])
-            )
-            agent = TRPOAgent(config=config)
-            runner = Runner(agent=agent, environment=environment)
-
-            def episode_finished(r):
-                return r.episode < 100 or not all(x >= 1.0 for x in r.episode_rewards[-100:])
-
-            runner.run(episodes=2000, episode_finished=episode_finished)
-            print('TRPO Agent (continuous): ' + str(runner.episode))
-
-            if runner.episode < 2000:
-                passed += 1
-
-        print('TRPO continuous agent passed = {}'.format(passed))
-        self.assertTrue(passed >= 4)
+    agent = TRPOAgent
+    deterministic = False
+    config = Configuration(
+        batch_size=64,
+        normalize_rewards=True
+    )

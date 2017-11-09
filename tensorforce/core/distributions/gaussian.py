@@ -12,68 +12,127 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""
-Standard Gaussian policy.
-"""
 
 from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import division
 
-import numpy as np
+from math import e, log, pi
 import tensorflow as tf
 
 from tensorforce import util
-from tensorforce.core.networks import layers
+from tensorforce.core.networks import Linear
 from tensorforce.core.distributions import Distribution
 
 
 class Gaussian(Distribution):
+    """
+    Gaussian distribution, for unbounded continuous actions.
+    """
 
-    def __init__(self, distribution=None):
-        assert distribution is None or len(distribution) == 2
-        super(Gaussian, self).__init__(distribution)
-        if self.distribution is not None:
-            self.mean, self.log_std_dev = self.distribution
+    def __init__(self, shape, mean=0.0, log_stddev=0.0, scope='gaussian', summary_labels=()):
+        self.shape = shape
+        action_size = util.prod(self.shape)
 
-    def create_tf_operations(self, x, deterministic, min_value=None, max_value=None, **kwargs):
-        assert (min_value is None) == (max_value is None)
-        self.mean = tf.squeeze(input=layers['linear'](x=x, size=1), axis=1)
-        if min_value is not None:  # TODO: min_value, max_value
-            self.mean = min_value + tf.sigmoid(x=self.mean) * (max_value - min_value)
-        self.log_std_dev = tf.squeeze(input=layers['linear'](x=x, size=1), axis=1)
-        self.log_std_dev = tf.minimum(x=self.log_std_dev, y=10.0)
-        self.distribution = (self.mean, self.log_std_dev)
+        with tf.name_scope(name=scope):
+            self.mean = Linear(size=action_size, bias=mean, scope='mean')
+            self.log_stddev = Linear(size=action_size, bias=log_stddev, scope='log-stddev')
 
-        self.deterministic_value = self.mean
-        self.sampled_value = self.mean + tf.exp(x=self.log_std_dev) * tf.random_normal(shape=tf.shape(self.mean))
-        # TODO: clipping?
-        # if min_value is not None:
-        #     self.sampled_value = tf.clip_by_value(
-        #         t=self.sampled_value,
-        #         clip_value_min=min_value,
-        #         clip_value_max=max_value
-        #     )
-        self.value = tf.where(
-            condition=deterministic,
-            x=self.deterministic_value,
-            y=self.sampled_value
-        )
+        super(Gaussian, self).__init__(scope, summary_labels)
 
-    def log_probability(self, action):
-        l2_dist = tf.square(action - self.mean)
-        sqr_std_dev = tf.square(x=tf.exp(x=self.log_std_dev))
-        log_prob = -l2_dist / (2 * sqr_std_dev + util.epsilon) - 0.5 * tf.log(tf.constant(2 * np.pi)) - self.log_std_dev
-        return log_prob
+    def tf_parameterize(self, x):
+        # Flat mean and log standard deviation
+        mean = self.mean.apply(x=x)
+        log_stddev = self.log_stddev.apply(x=x)
 
-    def entropy(self):
-        entropy = tf.reduce_mean(self.log_std_dev + tf.constant(0.5 * np.log(2 * np.pi * np.e), tf.float32), axis=0)
-        return entropy
+        # Reshape mean and log stddev to action shape
+        shape = (-1,) + self.shape
+        mean = tf.reshape(tensor=mean, shape=shape)
+        log_stddev = tf.reshape(tensor=log_stddev, shape=shape)
 
-    def kl_divergence(self, other):
-        assert isinstance(other, Gaussian)
-        l2_dist = tf.square(self.mean - other.mean)
-        std_dev1 = tf.exp(x=self.log_std_dev)
-        sqr_std_dev2 = tf.square(x=tf.exp(x=other.log_std_dev))
-        kl_div = tf.reduce_mean(self.log_std_dev - other.log_std_dev + (std_dev1 + l2_dist) / (2 * sqr_std_dev2 + util.epsilon) - 0.5, axis=0)
-        return kl_div
+        # Clip log stddev for numerical stability
+        log_eps = log(util.epsilon)  # epsilon < 1.0, hence negative
+        log_stddev = tf.clip_by_value(t=log_stddev, clip_value_min=log_eps, clip_value_max=-log_eps)
+
+        # Standard deviation
+        stddev = tf.exp(x=log_stddev)
+
+        return mean, stddev, log_stddev
+
+    def state_value(self, distr_params):
+        _, _, log_stddev = distr_params
+        return -log_stddev - 0.5 * log(2.0 * pi)
+
+    def state_action_value(self, distr_params, action):
+        mean, stddev, log_stddev = distr_params
+
+        sq_mean_distance = tf.square(x=(action - mean))
+        sq_stddev = tf.maximum(x=tf.square(x=stddev), y=util.epsilon)
+        return -0.5 * sq_mean_distance / sq_stddev - 2.0 * log_stddev - log(2.0 * pi)
+
+    def tf_sample(self, distr_params, deterministic):
+        mean, stddev, _ = distr_params
+
+        # Deterministic: mean as action
+        definite = mean
+
+        # Non-deterministic: sample action using default normal distribution
+        normal_distribution = tf.random_normal(shape=tf.shape(input=mean))
+        sampled = mean + stddev * normal_distribution
+
+        return tf.where(condition=deterministic, x=definite, y=sampled)
+
+    def tf_log_probability(self, distr_params, action):
+        mean, stddev, log_stddev = distr_params
+        sq_mean_distance = tf.square(x=(action - mean))
+        sq_stddev = tf.maximum(x=tf.square(x=stddev), y=util.epsilon)
+        return -0.5 * sq_mean_distance / sq_stddev - log_stddev - 0.5 * log(2.0 * pi)
+
+    def tf_entropy(self, distr_params):
+        _, _, log_stddev = distr_params
+        return log_stddev + 0.5 * log(2.0 * pi * e)
+
+    def tf_kl_divergence(self, distr_params1, distr_params2):
+        mean1, stddev1, log_stddev1 = distr_params1
+        mean2, stddev2, log_stddev2 = distr_params2
+
+        log_stddev_ratio = log_stddev2 - log_stddev1
+        sq_mean_distance = tf.square(x=(mean1 - mean2))
+        sq_stddev1 = tf.square(x=stddev1)
+        sq_stddev2 = tf.maximum(x=tf.square(x=stddev2), y=util.epsilon)
+
+        return log_stddev_ratio + 0.5 * (sq_stddev1 + sq_mean_distance) / sq_stddev2 - 0.5
+
+    def tf_regularization_loss(self):
+        regularization_loss = super(Gaussian, self).tf_regularization_loss()
+        if regularization_loss is None:
+            losses = list()
+        else:
+            losses = [regularization_loss]
+
+        regularization_loss = self.mean.regularization_loss()
+        if regularization_loss is not None:
+            losses.append(regularization_loss)
+
+        regularization_loss = self.log_stddev.regularization_loss()
+        if regularization_loss is not None:
+            losses.append(regularization_loss)
+
+        if len(losses) > 0:
+            return tf.add_n(inputs=losses)
+        else:
+            return None
+
+    def get_variables(self, include_non_trainable=False):
+        distribution_variables = super(Gaussian, self).get_variables(include_non_trainable=include_non_trainable)
+        mean_variables = self.mean.get_variables(include_non_trainable=include_non_trainable)
+        log_stddev_variables = self.log_stddev.get_variables(include_non_trainable=include_non_trainable)
+
+        return distribution_variables + mean_variables + log_stddev_variables
+
+    def get_summaries(self):
+        distribution_summaries = super(Gaussian, self).get_summaries()
+        mean_summaries = self.mean.get_summaries()
+        log_stddev_summaries = self.log_stddev.get_summaries()
+
+        return distribution_summaries + mean_summaries + log_stddev_summaries

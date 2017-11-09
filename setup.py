@@ -19,7 +19,7 @@ from __future__ import division
 
 import os
 
-from setuptools import setup
+from setuptools import setup, find_packages
 
 install_requires=[
     'numpy',
@@ -35,10 +35,11 @@ setup_requires=[
 ]
 
 extras_require = {
-    'tf': ['tensorflow>=1.2.0'],
-    'tf_gpu': ['tensorflow-gpu>=1.2.0'],
+    'tf': ['tensorflow>=1.3.0'],
+    'tf_gpu': ['tensorflow-gpu>=1.3.0'],
     'gym': ['gym>=0.7.4'],
-    'universe': ['universe>=0.21.3']
+    'universe': ['universe>=0.21.3'],
+    'mazeexp': ['mazeexp>=0.0.1']
 }
 
 # Readthedocs requires Sphinx extensions to be specified as part of
@@ -49,13 +50,14 @@ if on_rtd:
 
 
 setup(name='tensorforce',
-      version='0.2',
+      version='0.3.1',  # please remember to edit tensorforce/__init__.py when updating the version
       description='Reinforcement learning for TensorFlow',
       url='http://github.com/reinforceio/tensorforce',
+      download_url='https://github.com/reinforceio/tensorforce/archive/0.3.1.tar.gz',
       author='reinforce.io',
       author_email='contact@reinforce.io',
       license='Apache 2.0',
-      packages=['tensorforce'],
+      packages=[package for package in find_packages() if package.startswith('tensorforce')],
       install_requires=install_requires,
       setup_requires=setup_requires,
       extras_require=extras_require,

@@ -13,61 +13,48 @@
 # limitations under the License.
 # ==============================================================================
 
-"""
-Random agent that always returns a random action.
-"""
-
 from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import division
 
-from random import gauss, random, randrange
-
 from tensorforce.agents import Agent
+from tensorforce.models.random_model import RandomModel
 
 
 class RandomAgent(Agent):
+    """
+    Random agent, useful as a baseline and sanity check.
+    """
 
-    name = 'RandomAgent'
-    model = (lambda config: None)
+    default_config = dict(
+        # Agent
+        preprocessing=None,
+        exploration=None,
+        reward_preprocessing=None,
+        batched_observe=1000,
+        # General
+        log_level='info',
+        device=None,
+        scope='random',
+        saver_spec=None,
+        summary_spec=None,
+        distributed_spec=None
+    )
 
-    def __init__(self, config):
-        super(RandomAgent, self).__init__(config)
+    def __init__(self, states_spec, actions_spec, config):
+        config = config.copy()
+        config.default(self.__class__.default_config)
+        config.obligatory(
+            optimizer=None,
+            discount=1.0,
+            normalize_rewards=False,
+            variable_noise=None
+        )
+        super(RandomAgent, self).__init__(states_spec, actions_spec, config)
 
-    def reset(self):
-        self.episode += 1
-
-    def act(self, state, deterministic=False):
-        """
-        Get random action from action space
-
-        :param state: current state (disregarded)
-        :return: random action
-        """
-        self.timestep += 1
-
-        if self.unique_state:
-            self.current_state = dict(state=state)
-        else:
-            self.current_state = state
-
-        self.current_action = dict()
-        for name, action in self.actions_config.items():
-            if action.continuous:
-                action = random()
-                if 'min_value' in action:
-                    action = action.min_value + random() * (action.max_value - action.min_value)
-                else:
-                    action = gauss(mu=0.0, sigma=1.0)
-            else:
-                action = randrange(action.num_actions)
-            self.current_action[name] = action
-
-        if self.unique_action:
-            return self.current_action['action']
-        else:
-            return self.current_action
-
-    def observe(self, reward, terminal):
-        self.current_reward = reward
-        self.current_terminal = terminal
+    def initialize_model(self, states_spec, actions_spec, config):
+        return RandomModel(
+            states_spec=states_spec,
+            actions_spec=actions_spec,
+            config=config
+        )

@@ -1,21 +1,14 @@
 {
-  "loglevel": "info",
-  "override_line_search": false,
-  "batch_size": 1000,
-  "discount": 0.97,
-  "baseline": "mlp",
-  "baseline_args": null,
-  "baseline_kwargs": {
-     "size": 32,
-     "repeat_update": 100
-  },
-  "generalized_advantage_estimation": true,
-  "normalize_advantage" : false,
-  "gae_lambda": 0.97,
-  "cg_iterations" : 20,
-  "cg_damping" : 0.01,
-  "line_search_steps" : 20,
-  "max_kl_divergence": 0.005,
-  "continuous": false,
-  "preprocessing": null
+    "batch_size": 4000,
+    "learning_rate": 1e-2,
+
+    "discount": 0.99,
+    "normalize_rewards": false,
+    "entropy_regularization": null,
+    "gae_lambda": null,
+    "likelihood_ratio_clipping": null,
+
+    "baseline_mode": null,
+    "baseline":  null,
+    "baseline_optimizer": null
 }

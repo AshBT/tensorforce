@@ -18,18 +18,28 @@ from tensorforce.core.explorations import Exploration
 
 class EpsilonDecay(Exploration):
     """
-    Linearly decaying epsilon parameter based on number of states,
-    an initial random epsilon and a final random epsilon.
+    Exponentially decaying epsilon parameter based on ratio of
+    difference between current and final epsilon to total timesteps.
     """
 
-    def __init__(self, epsilon=1.0, epsilon_final=0.1, epsilon_timesteps=10000):
+    def __init__(self, epsilon=1.0, epsilon_final=0.1, epsilon_timesteps=10000, start_after=0, half_lives=10):
         self.epsilon = epsilon
         self.epsilon_final = epsilon_final
         self.epsilon_timesteps = epsilon_timesteps
+        self.start_after = start_after
+        self.half_life = self.epsilon_timesteps / half_lives
 
     def __call__(self, episode=0, timestep=0):
+        if timestep < self.start_after:
+            return self.epsilon
+
+        offset = self.start_after
+
         if timestep > self.epsilon_timesteps:
-            self.epsilon = self.epsilon_final
+            epsilon = self.epsilon_final
         else:
-            self.epsilon -= ((self.epsilon - self.epsilon_final) / self.epsilon_timesteps) * timestep
-        return self.epsilon
+            epsilon = self.epsilon_final + \
+                (self.epsilon - self.epsilon_final) * \
+                2 ** (- (timestep - offset) / self.half_life)
+
+        return epsilon

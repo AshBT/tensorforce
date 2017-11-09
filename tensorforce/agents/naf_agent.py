@@ -13,79 +13,108 @@
 # limitations under the License.
 # ==============================================================================
 
-"""
-Agent using Normalized Advantage Functions.
-"""
-
 from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import division
 
 from tensorforce.agents import MemoryAgent
-from tensorforce.models import NAFModel
+from tensorforce.models import QNAFModel
 
 
 class NAFAgent(MemoryAgent):
     """
-    Normalized Advantage Functions (NAF) agent ([Gu et al., 2016](https://arxiv.org/pdf/1603.00748.pdf)), a.k.a.
-    DQN for continuous actions.
+    NAF: https://arxiv.org/abs/1603.00748
 
-    Configuration:
+    ### Configuration options
 
-    Each agent requires the following configuration parameters:
+    #### General:
 
-    * `states`: dict containing one or more state definitions.
-    * `actions`: dict containing one or more action definitions.
-    * `preprocessing`: dict or list containing state preprocessing configuration.
-    * `exploration`: dict containing action exploration configuration.
+    * `scope`: TensorFlow variable scope name (default: 'vpg')
 
-    The `MemoryAgent` class additionally requires the following parameters:
+    #### Hyperparameters:
 
-    * `batch_size`: integer of the batch size.
-    * `memory_capacity`: integer of maximum experiences to store.
-    * `memory`: string indicating memory type ('replay' or 'prioritized_replay').
-    * `memory_args`: list of arguments to pass to replay memory constructor.
-    * `memory_kwargs`: list of keyword arguments to pass to replay memory constructor.
-    * `update_frequency`: integer indicating the number of steps between model updates.
-    * `first_update`: integer indicating the number of steps to pass before the first update.
-    * `repeat_update`: integer indicating how often to repeat the model update.
+    * `batch_size`: Positive integer (**mandatory**)
+    * `learning_rate`: positive float (default: 1e-3)
+    * `discount`: Positive float, at most 1.0 (default: 0.99)
+    * `normalize_rewards`: Boolean (default: false)
+    * `entropy_regularization`: None or positive float (default: none)
 
-    Each model requires the following configuration parameters:
+    #### Optimizer:
 
-    * `discount`: float of discount factor (gamma).
-    * `learning_rate`: float of learning rate (alpha).
-    * `optimizer`: string of optimizer to use (e.g. 'adam').
-    * `optimizer_args`: list of arguments for optimizer.
-    * `optimizer_kwargs`: dict of keyword arguments for optimizer.
-    * `device`: string of tensorflow device name.
-    * `tf_saver`: boolean whether to save model parameters.
-    * `tf_summary`: boolean indicating whether to use tensorflow summary file writer.
-    * `log_level`: string containing logleve (e.g. 'info').
-    * `distributed`: boolean indicating whether to use distributed tensorflow.
-    * `global_model`: global model.
-    * `session`: session to use.
+    * `optimizer`: Specification dict (default: Adam with learning rate 1e-3)
 
-    The NAF agent expects the following additional configuration parameters:
+    #### Pre-/post-processing:
 
-    * `target_update_frequency`: int of states between updates of the target network.
-    * `update_target_weight`: float of update target weight (tau parameter).
-    * `clip_gradients`: float of maximum values for gradients before clipping.
+    * `state_preprocessing`: None or dict with (default: none)
+    * `exploration`: None or dict with (default: none)
+    * `reward_preprocessing`: None or dict with (default: none)
 
+    #### Logging:
+
+    * `log_level`: Logging level, one of the following values (default: 'info')
+        + 'info', 'debug', 'critical', 'warning', 'fatal'
+
+    #### TensorFlow Summaries:
+    * `summary_logdir`: None or summary directory string (default: none)
+    * `summary_labels`: List of summary labels to be reported, some possible values below (default: 'total-loss')
+        + 'total-loss'
+        + 'losses'
+        + 'variables'
+        + 'activations'
+        + 'relu'
+    * `summary_frequency`: Positive integer (default: 1)
     """
 
-    name = 'NAFAgent'
-    model = NAFModel
     default_config = dict(
-        target_update_frequency=10000
+        # Agent
+        preprocessing=None,
+        exploration=None,
+        reward_preprocessing=None,
+        batched_observe=1000,
+        # MemoryAgent
+        # batch_size !!!
+        memory=dict(  # not documented!!!
+            type='replay',
+            capacity=100000
+        ),
+        first_update=10000,  # not documented!!!
+        update_frequency=4,  # not documented!!!
+        repeat_update=1,  # not documented!!!
+        # Model
+        optimizer=dict(
+            type='adam',
+            learning_rate=1e-3
+        ),
+        discount=0.99,
+        normalize_rewards=False,
+        variable_noise=None,  # not documented!!!
+        # DistributionModel
+        distributions_spec=None,  # not documented!!!
+        entropy_regularization=None,
+        # QModel
+        target_sync_frequency=10000,  # not documented!!!
+        target_update_weight=1.0,  # not documented!!!
+        double_q_model=False,  # not documented!!!
+        huber_loss=None,  # not documented!!!
+        # General
+        log_level='info',
+        device=None,
+        scope='naf',
+        saver_spec=None,
+        summary_spec=None,
+        distributed_spec=None
     )
 
-    def __init__(self, config):
-        config.default(MemoryAgent.default_config)
-        super(NAFAgent, self).__init__(config)
-        self.target_update_frequency = config.target_update_frequency
+    def __init__(self, states_spec, actions_spec, network_spec, config):
+        self.network_spec = network_spec
+        config = config.copy()
+        config.default(self.__class__.default_config)
+        super(NAFAgent, self).__init__(states_spec, actions_spec, config)
 
-    def observe(self, reward, terminal):
-        super(NAFAgent, self).observe(reward=reward, terminal=terminal)
-
-        if self.timestep >= self.first_update and self.timestep % self.target_update_frequency == 0:
-            self.model.update_target()
+    def initialize_model(self, states_spec, actions_spec, config):
+        return QNAFModel(
+            states_spec=states_spec,
+            actions_spec=actions_spec,
+            network_spec=self.network_spec,
+            config=config
+        )

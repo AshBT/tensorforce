@@ -18,15 +18,16 @@ Deepmind lab execution
 """
 
 from __future__ import absolute_import
-from __future__ import print_function
 from __future__ import division
+from __future__ import print_function
 
-import sys
-import os
 import argparse
 import logging
+import os
+import sys
+import time
+
 import numpy as np
-import deepmind_lab
 
 from tensorforce import TensorForceError
 from tensorforce.agents import agents
@@ -36,7 +37,7 @@ from tensorforce.core.networks import from_json
 logger = logging.getLogger(__name__)
 
 from tensorforce.config import Configuration
-from tensorforce.environments.deepmind_lab import DeepMindLab
+from tensorforce.contrib.deepmind_lab import DeepMindLab
 from tensorforce.execution import Runner
 
 
@@ -96,9 +97,7 @@ def main():
     runner = Runner(
         agent=agent,
         environment=environment,
-        repeat_actions=1,
-        save_path=args.save,
-        save_episodes=args.save_episodes
+        repeat_actions=1
     )
     if args.load:
         load_dir = os.path.dirname(args.load)
@@ -123,7 +122,8 @@ def main():
 
     def episode_finished(r):
         if r.episode % report_episodes == 0:
-            logger.info("Finished episode {ep} after {ts} timesteps".format(ep=r.episode + 1, ts=r.timestep + 1))
+            sps = r.total_timesteps / (time.time() - r.start_time)
+            logger.info("Finished episode {ep} after {ts} timesteps. Steps Per Second {sps}".format(ep=r.episode, ts=r.timestep, sps=sps))
             logger.info("Episode reward: {}".format(r.episode_rewards[-1]))
             logger.info("Average of last 500 rewards: {}".format(np.mean(r.episode_rewards[-500:])))
             logger.info("Average of last 100 rewards: {}".format(np.mean(r.episode_rewards[-100:])))
